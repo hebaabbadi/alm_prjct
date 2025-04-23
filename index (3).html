@@ -1,0 +1,878 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CV en ligne - Générateur</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .formulaire-section {
+            flex: 1;
+            padding: 30px;
+            background-color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+
+        .cv-preview {
+            flex: 1;
+            padding: 0;
+            background-color: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            position: sticky;
+            top: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        h1, h2, h3 {
+            font-family: 'Montserrat', sans-serif;
+            color: #2c3e50;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 30px 0;
+            color: #3498db;
+            font-size: 2.5em;
+        }
+
+        h2 {
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+            margin: 20px 0;
+        }
+
+        form {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Roboto', sans-serif;
+            font-size: 1em;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #2c3e50;
+        }
+
+        .download-btn {
+            background-color: #e74c3c;
+            width: 100%;
+            margin: 20px;
+        }
+
+        .onglets {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #3498db;
+            flex-wrap: wrap;
+        }
+
+        .onglet {
+            padding: 12px 20px;
+            cursor: pointer;
+            background-color: #eee;
+            border: none;
+            border-radius: 5px 5px 0 0;
+            margin-right: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .onglet:hover {
+            background-color: #ddd;
+        }
+
+        .onglet.actif {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .contenu-onglet {
+            display: none;
+        }
+
+        .contenu-onglet.actif {
+            display: block;
+        }
+
+        .theme-selector {
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+        }
+
+        .theme-selector h3 {
+            margin-bottom: 15px;
+        }
+
+        .theme-options {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .theme-option {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border 0.3s;
+        }
+
+        .theme-option:hover, .theme-option.selected {
+            border: 2px solid #2c3e50;
+        }
+
+        /* CV Preview Specific Styles */
+        .cv-content {
+            display: flex;
+            min-height: 100%;
+        }
+
+        .cv-sidebar {
+            width: 35%;
+            padding: 30px;
+            color: white;
+            transition: all 0.3s ease;
+        }
+
+        .cv-main {
+            width: 65%;
+            padding: 30px;
+            background-color: white;
+            transition: all 0.3s ease;
+        }
+
+        .cv-section {
+            margin-bottom: 30px;
+            opacity: 0;
+            transform: translateY(10px);
+            animation: fadeIn 0.5s forwards;
+        }
+
+        @keyframes fadeIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .cv-section h3 {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            position: relative;
+        }
+
+        .cv-section h3::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 50px;
+            height: 2px;
+            transition: all 0.3s ease;
+        }
+
+        .cv-contact p {
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+
+        .cv-description {
+            font-size: 0.9em;
+            line-height: 1.8;
+            margin-top: 15px;
+        }
+
+        .liste-items div {
+            margin-bottom: 15px;
+        }
+
+        .liste-items h4 {
+            font-size: 1em;
+            margin-bottom: 5px;
+        }
+
+        .liste-items p {
+            font-size: 0.9em;
+            margin: 3px 0;
+        }
+
+        .competences-liste span {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            margin: 5px 5px 0 0;
+            transition: all 0.3s ease;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Roboto:wght@300;400;700&family=Open+Sans:wght@300;400;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <h1>Générateur de CV Professionnel</h1>
+    
+    <div class="container">
+        <div class="formulaire-section">
+            <div class="theme-selector">
+                <h3>Personnalisation du CV</h3>
+                <div class="form-group">
+                    <label>Thème de couleur</label>
+                    <div class="theme-options">
+                        <div class="theme-option selected" style="background-color: #3498db" onclick="changeTheme('blue')"></div>
+                        <div class="theme-option" style="background-color: #2ecc71" onclick="changeTheme('green')"></div>
+                        <div class="theme-option" style="background-color: #9b59b6" onclick="changeTheme('purple')"></div>
+                        <div class="theme-option" style="background-color: #e74c3c" onclick="changeTheme('red')"></div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Police</label>
+                    <select id="font-selector" onchange="changeFont(this.value)">
+                        <option value="Roboto">Roboto</option>
+                        <option value="Open Sans">Open Sans</option>
+                        <option value="Lato">Lato</option>
+                        <option value="Montserrat">Montserrat</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="onglets">
+                <button class="onglet actif" onclick="changerOnglet(event, 'info-perso')">Infos personnelles</button>
+                <button class="onglet" onclick="changerOnglet(event, 'formation')">Formations</button>
+                <button class="onglet" onclick="changerOnglet(event, 'experience')">Expériences</button>
+                <button class="onglet" onclick="changerOnglet(event, 'projets')">Projets</button>
+                <button class="onglet" onclick="changerOnglet(event, 'competences')">Compétences</button>
+                <button class="onglet" onclick="changerOnglet(event, 'loisirs')">Loisirs</button>
+            </div>
+
+            <!-- Informations personnelles -->
+            <div id="info-perso" class="contenu-onglet actif">
+                <h2>Informations personnelles</h2>
+                <form id="form-info-perso">
+                    <div class="form-group">
+                        <label for="nom">Nom complet</label>
+                        <input type="text" id="nom" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="titre">Titre professionnel</label>
+                        <input type="text" id="titre" placeholder="ex: Développeur Web Full Stack">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="telephone">Téléphone</label>
+                        <input type="tel" id="telephone">
+                    </div>
+                    <div class="form-group">
+                        <label for="adresse">Adresse</label>
+                        <input type="text" id="adresse">
+                    </div>
+                    <div class="form-group">
+                        <label for="description">Description / À propos</label>
+                        <textarea id="description" rows="4"></textarea>
+                    </div>
+                    <button type="submit">Enregistrer</button>
+                </form>
+            </div>
+
+            <!-- Formations -->
+            <div id="formation" class="contenu-onglet">
+                <h2>Formations</h2>
+                <form id="form-formation">
+                    <div class="form-group">
+                        <label for="diplome">Diplôme / Certification</label>
+                        <input type="text" id="diplome" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ecole">Établissement</label>
+                        <input type="text" id="ecole">
+                    </div>
+                    <div class="form-group">
+                        <label for="date-debut-formation">Date de début</label>
+                        <input type="month" id="date-debut-formation">
+                    </div>
+                    <div class="form-group">
+                        <label for="date-fin-formation">Date de fin</label>
+                        <input type="month" id="date-fin-formation">
+                    </div>
+                    <div class="form-group">
+                        <label for="description-formation">Description</label>
+                        <textarea id="description-formation" rows="3"></textarea>
+                    </div>
+                    <button type="submit">Ajouter formation</button>
+                </form>
+            </div>
+
+            <!-- Expériences professionnelles -->
+            <div id="experience" class="contenu-onglet">
+                <h2>Expériences professionnelles</h2>
+                <form id="form-experience">
+                    <div class="form-group">
+                        <label for="poste">Poste / Fonction</label>
+                        <input type="text" id="poste" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="entreprise">Entreprise</label>
+                        <input type="text" id="entreprise">
+                    </div>
+                    <div class="form-group">
+                        <label for="lieu">Lieu</label>
+                        <input type="text" id="lieu">
+                    </div>
+                    <div class="form-group">
+                        <label for="date-debut-exp">Date de début</label>
+                        <input type="month" id="date-debut-exp">
+                    </div>
+                    <div class="form-group">
+                        <label for="date-fin-exp">Date de fin</label>
+                        <input type="month" id="date-fin-exp">
+                    </div>
+                    <div class="form-group">
+                        <label for="description-exp">Description et responsabilités</label>
+                        <textarea id="description-exp" rows="4"></textarea>
+                    </div>
+                    <button type="submit">Ajouter expérience</button>
+                </form>
+            </div>
+
+            <!-- Projets réalisés -->
+            <div id="projets" class="contenu-onglet">
+                <h2>Projets réalisés</h2>
+                <form id="form-projet">
+                    <div class="form-group">
+                        <label for="titre-projet">Titre du projet</label>
+                        <input type="text" id="titre-projet" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="technos">Technologies utilisées</label>
+                        <input type="text" id="technos" placeholder="ex: HTML, CSS, JavaScript">
+                    </div>
+                    <div class="form-group">
+                        <label for="date-projet">Date</label>
+                        <input type="month" id="date-projet">
+                    </div>
+                    <div class="form-group">
+                        <label for="description-projet">Description</label>
+                        <textarea id="description-projet" rows="4"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="lien-projet">Lien</label>
+                        <input type="url" id="lien-projet" placeholder="https://...">
+                    </div>
+                    <button type="submit">Ajouter projet</button>
+                </form>
+            </div>
+
+            <!-- Compétences techniques -->
+            <div id="competences" class="contenu-onglet">
+                <h2>Compétences techniques</h2>
+                <form id="form-competence">
+                    <div class="form-group">
+                        <label for="categorie">Catégorie</label>
+                        <select id="categorie">
+                            <option value="Langages de programmation">Langages de programmation</option>
+                            <option value="Technologies web">Technologies web</option>
+                            <option value="Frameworks">Frameworks</option>
+                            <option value="Outils">Outils</option>
+                            <option value="Base de données">Base de données</option>
+                            <option value="Autre">Autre</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="nom-competence">Nom de la compétence</label>
+                        <input type="text" id="nom-competence" required placeholder="ex: JavaScript">
+                    </div>
+                    <div class="form-group">
+                        <label for="niveau">Niveau (1-5)</label>
+                        <input type="range" id="niveau" min="1" max="5" value="3">
+                    </div>
+                    <button type="submit">Ajouter compétence</button>
+                </form>
+            </div>
+
+            <!-- Loisirs -->
+            <div id="loisirs" class="contenu-onglet">
+                <h2>Loisirs et centres d'intérêt</h2>
+                <form id="form-loisir">
+                    <div class="form-group">
+                        <label for="nom-loisir">Loisir / Centre d'intérêt</label>
+                        <input type="text" id="nom-loisir" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="description-loisir">Description (optionnelle)</label>
+                        <textarea id="description-loisir" rows="3"></textarea>
+                    </div>
+                    <button type="submit">Ajouter loisir</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Aperçu CV -->
+        <div class="cv-preview">
+            <h2 style="padding: 20px;">Aperçu de votre CV</h2>
+            <button class="download-btn" onclick="downloadPDF()">Télécharger CV (PDF)</button>
+            <div class="cv-content">
+                <div class="cv-sidebar">
+                    <div id="cv-infos-perso" class="cv-section">
+                        <h3 id="cv-nom">Votre Nom</h3>
+                        <p id="cv-titre-pro">Titre professionnel</p>
+                        <div class="cv-contact">
+                            <p id="cv-contact">Email: | Tél: | Adresse:</p>
+                        </div>
+                        <p id="cv-description" class="cv-description"></p>
+                    </div>
+                    <div class="cv-section">
+                        <h3>Compétences techniques</h3>
+                        <div id="cv-competences"></div>
+                    </div>
+                </div>
+                <div class="cv-main">
+                    <div class="cv-section">
+                        <h3>Formation</h3>
+                        <div id="cv-formations" class="liste-items"></div>
+                    </div>
+                    <div class="cv-section">
+                        <h3>Expérience professionnelle</h3>
+                        <div id="cv-experiences" class="liste-items"></div>
+                    </div>
+                    <div class="cv-section">
+                        <h3>Projets réalisés</h3>
+                        <div id="cv-projets" class="liste-items"></div>
+                    </div>
+                    <div class="cv-section">
+                        <h3>Loisirs et centres d'intérêt</h3>
+                        <div id="cv-loisirs" class="liste-items"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Theme configurations
+        const themes = {
+            blue: {
+                primary: '#3498db',
+                secondary: '#2c3e50',
+                accent: '#e74c3c',
+                text: '#333',
+                background: '#f5f5f5'
+            },
+            green: {
+                primary: '#2ecc71',
+                secondary: '#27ae60',
+                accent: '#e74c3c',
+                text: '#333',
+                background: '#f0f9f4'
+            },
+            purple: {
+                primary: '#9b59b6',
+                secondary: '#8e44ad',
+                accent: '#3498db',
+                text: '#333',
+                background: '#f5f0f9'
+            },
+            red: {
+                primary: '#e74c3c',
+                secondary: '#c0392b',
+                accent: '#3498db',
+                text: '#333',
+                background: '#f9f0f0'
+            }
+        };
+
+        // Global state for selected theme and font
+        let selectedTheme = 'blue';
+        let selectedFont = 'Roboto';
+
+        // Apply CV styles
+        function applyCVStyles() {
+            const theme = themes[selectedTheme];
+            const sidebar = document.querySelector('.cv-sidebar');
+            const main = document.querySelector('.cv-main');
+            const sections = document.querySelectorAll('.cv-section h3');
+            const skills = document.querySelectorAll('.competences-liste span');
+
+            // Sidebar styles
+            sidebar.style.backgroundColor = theme.primary;
+            sidebar.style.color = '#ffffff';
+            sidebar.style.fontFamily = `'${selectedFont}', sans-serif`;
+
+            // Main section styles
+            main.style.backgroundColor = '#ffffff';
+            main.style.color = theme.text;
+            main.style.fontFamily = `'${selectedFont}', sans-serif`;
+
+            // Section titles
+            sections.forEach(section => {
+                section.style.color = theme.secondary;
+                section.style.fontFamily = `'${selectedFont}', sans-serif`;
+                section.style.borderBottom = `2px solid ${theme.accent}`;
+            });
+
+            // Skills tags
+            skills.forEach(skill => {
+                skill.style.backgroundColor = theme.accent;
+                skill.style.color = '#ffffff';
+            });
+
+            // Other text elements
+            document.querySelectorAll('.cv-main h4').forEach(h4 => {
+                h4.style.color = theme.secondary;
+                h4.style.fontFamily = `'${selectedFont}', sans-serif`;
+            });
+
+            document.querySelectorAll('.cv-main p').forEach(p => {
+                p.style.color = theme.text;
+                p.style.fontFamily = `'${selectedFont}', sans-serif`;
+            });
+
+            document.querySelectorAll('.cv-sidebar p').forEach(p => {
+                p.style.fontFamily = `'${selectedFont}', sans-serif`;
+            });
+        }
+
+        // Change theme
+        function changeTheme(themeName) {
+            selectedTheme = themeName;
+            document.querySelectorAll('.theme-option').forEach(opt => {
+                opt.classList.remove('selected');
+                if (opt.style.backgroundColor === themes[themeName].primary) {
+                    opt.classList.add('selected');
+                }
+            });
+            applyCVStyles();
+        }
+
+        // Change font
+        function changeFont(font) {
+            selectedFont = font;
+            applyCVStyles();
+        }
+
+        // Gérer les onglets
+        function changerOnglet(evt, ongletId) {
+            document.querySelectorAll('.contenu-onglet').forEach(el => el.classList.remove('actif'));
+            document.querySelectorAll('.onglet').forEach(el => el.classList.remove('actif'));
+            document.getElementById(ongletId).classList.add('actif');
+            evt.currentTarget.classList.add('actif');
+        }
+
+        // Format date
+        function formatDate(dateStr) {
+            if (!dateStr) return 'Présent';
+            const date = new Date(dateStr);
+            return `${date.getMonth() + 1}/${date.getFullYear()}`;
+        }
+
+        // Download PDF
+        function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+            const pageWidth = doc.internal.pageSize.getWidth();
+            const theme = themes[selectedTheme];
+            let y = 15;
+
+            // Helper function to add text with wrapping and styling
+            function addText(text, x, y, fontSize = 12, maxWidth = pageWidth - 40, weight = 'normal', color = theme.text) {
+                doc.setFont(selectedFont, weight);
+                doc.setFontSize(fontSize);
+                doc.setTextColor(color);
+                const lines = doc.splitTextToSize(text, maxWidth);
+                lines.forEach(line => {
+                    if (y + fontSize / 2.83 > doc.internal.pageSize.getHeight() - 15) {
+                        doc.addPage();
+                        y = 15;
+                    }
+                    doc.text(line, x, y);
+                    y += fontSize / 2;
+                });
+                return y;
+            }
+
+            // Helper function to add section title
+            function addSectionTitle(title, x, y, color) {
+                doc.setFillColor(theme.primary);
+                doc.rect(x, y - 4, pageWidth - 30, 8, 'F');
+                y = addText(title, x + 5, y + 2, 14, pageWidth - 40, 'bold', '#ffffff');
+                return y + 5;
+            }
+
+            // Sidebar content (simulated in PDF)
+            y = addText(document.getElementById('cv-nom').textContent, 20, y, 18, pageWidth - 40, 'bold', theme.secondary);
+            y = addText(document.getElementById('cv-titre-pro').textContent, 20, y, 12, pageWidth - 40, 'normal', theme.text);
+            y = addText(document.getElementById('cv-contact').textContent, 20, y, 10, pageWidth - 40, 'normal', theme.text);
+            y = addText(document.getElementById('cv-description').textContent, 20, y, 10, pageWidth - 40, 'normal', theme.text);
+            y += 8;
+
+            // Skills (simulated as a list in PDF)
+            const skillsSection = document.getElementById('cv-competences');
+            if (skillsSection.children.length > 0) {
+                y = addSectionTitle('Compétences techniques', 15, y, theme.primary);
+                Array.from(skillsSection.children).forEach(cat => {
+                    y = addText(cat.querySelector('h4').textContent, 20, y, 12, pageWidth - 40, 'bold', theme.secondary);
+                    const skills = Array.from(cat.querySelector('.competences-liste').children)
+                        .map(skill => skill.textContent);
+                    y = addText(skills.join(', '), 25, y, 10, pageWidth - 45, 'normal', theme.text);
+                    y += 3;
+                });
+                y += 5;
+            }
+
+            // Main content
+            const sections = [
+                { id: 'formations', title: 'Formation' },
+                { id: 'experiences', title: 'Expérience professionnelle' },
+                { id: 'projets', title: 'Projets réalisés' },
+                { id: 'loisirs', title: 'Loisirs et centres d\'intérêt' }
+            ];
+
+            sections.forEach(section => {
+                const sectionElement = document.getElementById(`cv-${section.id}`);
+                if (sectionElement.children.length > 0) {
+                    y = addSectionTitle(section.title, 15, y, theme.primary);
+                    Array.from(sectionElement.children).forEach(item => {
+                        const texts = Array.from(item.children).map((child, index) => ({
+                            text: child.textContent,
+                            isTitle: child.tagName === 'H4',
+                            isStrong: child.querySelector('strong') !== null
+                        }));
+                        texts.forEach(({ text, isTitle, isStrong }, idx) => {
+                            const fontSize = isTitle ? 12 : 10;
+                            const weight = isTitle || isStrong ? 'bold' : 'normal';
+                            const color = isTitle ? theme.secondary : theme.text;
+                            y = addText(text, 20, y, fontSize, pageWidth - 45, weight, color);
+                        });
+                        y += 3;
+                    });
+                    y += 5;
+                }
+            });
+
+            doc.save('cv.pdf');
+        }
+
+        // Form submissions
+        document.addEventListener('DOMContentLoaded', function() {
+            applyCVStyles(); // Initial style application
+
+            // Informations personnelles
+            document.getElementById('form-info-perso').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const nom = document.getElementById('nom').value;
+                const titre = document.getElementById('titre').value;
+                const email = document.getElementById('email').value;
+                const telephone = document.getElementById('telephone').value;
+                const adresse = document.getElementById('adresse').value;
+                const description = document.getElementById('description').value;
+
+                document.getElementById('cv-nom').textContent = nom;
+                document.getElementById('cv-titre-pro').textContent = titre;
+                document.getElementById('cv-contact').textContent = `Email: ${email} | Tél: ${telephone} | Adresse: ${adresse}`;
+                document.getElementById('cv-description').textContent = description;
+
+                alert('Informations personnelles enregistrées !');
+            });
+
+            // Formations
+            document.getElementById('form-formation').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const diplome = document.getElementById('diplome').value;
+                const ecole = document.getElementById('ecole').value;
+                const dateDebut = document.getElementById('date-debut-formation').value;
+                const dateFin = document.getElementById('date-fin-formation').value;
+                const description = document.getElementById('description-formation').value;
+
+                const formationElement = document.createElement('div');
+                formationElement.innerHTML = `
+                    <h4>${diplome}</h4>
+                    <p><strong>${ecole}</strong> - ${formatDate(dateDebut)} à ${formatDate(dateFin)}</p>
+                    <p>${description}</p>
+                `;
+                document.getElementById('cv-formations').appendChild(formationElement);
+                this.reset();
+                alert('Formation ajoutée !');
+            });
+
+            // Expériences professionnelles
+            document.getElementById('form-experience').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const poste = document.getElementById('poste').value;
+                const entreprise = document.getElementById('entreprise').value;
+                const lieu = document.getElementById('lieu').value;
+                const dateDebut = document.getElementById('date-debut-exp').value;
+                const dateFin = document.getElementById('date-fin-exp').value;
+                const description = document.getElementById('description-exp').value;
+
+                const experienceElement = document.createElement('div');
+                experienceElement.innerHTML = `
+                    <h4>${poste}</h4>
+                    <p><strong>${entreprise}</strong>, ${lieu} - ${formatDate(dateDebut)} à ${formatDate(dateFin)}</p>
+                    <p>${description}</p>
+                `;
+                document.getElementById('cv-experiences').appendChild(experienceElement);
+                this.reset();
+                alert('Expérience ajoutée !');
+            });
+
+            // Projets
+            document.getElementById('form-projet').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const titre = document.getElementById('titre-projet').value;
+                const technos = document.getElementById('technos').value;
+                const date = document.getElementById('date-projet').value;
+                const description = document.getElementById('description-projet').value;
+                const lien = document.getElementById('lien-projet').value;
+
+                const projetElement = document.createElement('div');
+                projetElement.innerHTML = `
+                    <h4>${titre}</h4>
+                    <p><strong>Technologies :</strong> ${technos} - ${formatDate(date)}</p>
+                    <p>${description}</p>
+                    ${lien ? `<p><a href="${lien}" target="_blank">Voir le projet</a></p>` : ''}
+                `;
+                document.getElementById('cv-projets').appendChild(projetElement);
+                this.reset();
+                alert('Projet ajouté !');
+            });
+
+            // Compétences
+            document.getElementById('form-competence').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const categorie = document.getElementById('categorie').value;
+                const nom = document.getElementById('nom-competence').value;
+                const niveau = document.getElementById('niveau').value;
+
+                let categorieElement = document.querySelector(`#cv-competences div[data-categorie="${categorie}"]`);
+                if (!categorieElement) {
+                    categorieElement = document.createElement('div');
+                    categorieElement.setAttribute('data-categorie', categorie);
+                    categorieElement.innerHTML = `<h4>${categorie}</h4><div class="competences-liste"></div>`;
+                    document.getElementById('cv-competences').appendChild(categorieElement);
+                }
+
+                const competenceElement = document.createElement('span');
+                competenceElement.textContent = `${nom} (${niveau}/5)`;
+                categorieElement.querySelector('.competences-liste').appendChild(competenceElement);
+                applyCVStyles();
+                this.reset();
+                document.getElementById('categorie').value = 'Langages de programmation';
+                document.getElementById('niveau').value = '3';
+                alert('Compétence ajoutée !');
+            });
+
+            // Loisirs
+            document.getElementById('form-loisir').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const nom = document.getElementById('nom-loisir').value;
+                const description = document.getElementById('description-loisir').value;
+
+                const loisirElement = document.createElement('div');
+                loisirElement.innerHTML = `
+                    <h4>${nom}</h4>
+                    ${description ? `<p>${description}</p>` : ''}
+                `;
+                document.getElementById('cv-loisirs').appendChild(loisirElement);
+                this.reset();
+                alert('Loisir ajouté !');
+            });
+        });
+    </script>
+</body>
+</html>
